@@ -1,6 +1,7 @@
-from telethon import functions, types
-from .. import loader, utils
+from telethon import functions, types, utils
 import asyncio
+from telethon.tl.types import ChatBannedRights, ChatAdminRights, ChatPhoto
+from datetime import datetime
 
 @loader.tds
 class ChannelMod(loader.Module):
@@ -27,9 +28,16 @@ class ChannelMod(loader.Module):
     async def list_channels(self):
         channels = self.db.get("ChannelMod", "channels", [])
         if channels:
-            return "\n".join([f"- {await self.client.get_entity(channel)}" for channel in channels])
+            return "\n".join([f"- {channel} ({await self.get_chat_link(channel)})" for channel in channels])
         else:
             return "Пока что не добавлено ни одного канала."
+
+    async def get_chat_link(self, channel_id):
+        try:
+            entity = await self.client.get_entity(channel_id)
+            return f"[{channel_id}](https://t.me/{entity.username})"
+        except Exception:
+            return f"{channel_id}"
 
     async def remove_channel(self, chat_link):
         try:
@@ -51,10 +59,7 @@ class ChannelMod(loader.Module):
         channels = self.db.get("ChannelMod", "channels", [])
         for channel_id in channels[:count]:
             await asyncio.sleep(delay)
-            try:
-                await self.client.send_message(channel_id, message)
-            except Exception as e:
-                print(f"Ошибка при отправке сообщения в канал {channel_id}: {e}")
+            await self.client.send_message(channel_id, message)
 
     async def new_post_cmd(self, message):
         """
