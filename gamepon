@@ -1,112 +1,107 @@
-import asyncio
-from telethon.tl import types
-from telethon.tl.patched import Message
-from typing import List
+from telethon.tl import functions, types
+from telethon import utils
+from telethon.errors import ChatAdminRequiredError
+from telethon.tl.functions.messages import ImportChatInviteRequest
+from asyncio import sleep
+import re
 
-# Добавьте эти строки в начало вашего кода, если их еще нет
-# (или подключите необходимые модули для работы с hikka)
-# import hikka
-# from hikka import loader, utils
+# Переменные для хранения данных
+chats = []
+posts = []
 
-# ...
 
-@loader.tds
-class ChatPosterMod(loader.Module):
-    """
-    Модуль для отправки сообщений в несколько чатов
-    """
+# Команда для добавления чата в список рассылки
+async def add_chat(client, message):
+    try:
+        chat_link = message.text.split(' ')[1]
+        chat = await client(ImportChatInviteRequest(chat_link))
+        chats.append(chat.id)
+        await message.edit(f"Чат {chat_link} добавлен для рассылки.")
+    except Exception as e:
+        await message.edit(f"Ошибка: {str(e)}")
 
-    strings = {
-        "add_chat_success": "<b>[ChatPoster]</b> Чат успешно добавлен.",
-        "del_chat_success": "<b>[ChatPoster]</b> Чат успешно удален.",
-        "list_chat_header": "<b>[ChatPoster]</b> Список чатов для рассылки:",
-        "list_chat_item": "Чат {index}: {title} ({chat_id})",
-        "list_post_header": "<b>[ChatPoster]</b> Список текстов для отправки:",
-        "list_post_item": "Текст {index}: {text}",
-    }
 
-    def __init__(self):
-        self.chats = []
-        self.posts = []
+# Команда для удаления чата из списка рассылки
+async def del_chat(client, message):
+    try:
+        chat_link = message.text.split(' ')[1]
+        chat = await client(ImportChatInviteRequest(chat_link))
+        chats.remove(chat.id)
+        await message.edit(f"Чат {chat_link} удален из списка рассылки.")
+    except Exception as e:
+        await message.edit(f"Ошибка: {str(e)}")
 
-    async def add_chat(self, chat: types.Chat):
-        if chat not in self.chats:
-            self.chats.append(chat)
-            return True
-        return False
 
-    async def del_chat(self, chat: types.Chat):
-        if chat in self.chats:
-            self.chats.remove(chat)
-            return True
-        return False
+# Команда для отображения списка чатов
+async def list_chat(client, message):
+    chat_list = []
+    for chat_id in chats:
+        try:
+            chat = await client.get_entity(chat_id)
+            chat_list.append(f"{chat.title} ({chat.id})")
+        except Exception as e:
+            print(f"Ошибка при получении информации о чате {chat_id}: {str(e)}")
 
-    async def list_chat(self):
-        result = [self.strings["list_chat_header"]]
-        for index, chat in enumerate(self.chats, start=1):
-            result.append(self.strings["list_chat_item"].format(index=index, title=chat.title, chat_id=chat.id))
-        return result
+    chat_list_str = '\n'.join(chat_list) if chat_list else "Список чатов пуст."
+    await message.edit(f"Список чатов для рассылки:\n{chat_list_str}")
 
-    async def list_post(self):
-        result = [self.strings["list_post_header"]]
-        for index, post in enumerate(self.posts, start=1):
-            result.append(self.strings["list_post_item"].format(index=index, text=post))
-        return result
 
-    async def add_post(self, text: str):
-        self.posts.append(text)
-        return True
+# Команда для отображения списка текстов
+async def list_post(client, message):
+    post_list_str = '\n'.join([f"{index + 1}. {post}" for index, post in enumerate(posts)]) if posts else "Список текстов пуст."
+    await message.edit(f"Список текстов для рассылки:\n{post_list_str}")
 
-    async def post(self, post_index: int, repeat_count: int, delay: int):
-        if 1 <= post_index <= len(self.posts):
-            for _ in range(repeat_count):
-                for chat in self.chats:
-                    await self.client.send_message(chat.id, self.posts[post_index - 1])
-                    await asyncio.sleep(delay)
-            return True
-        return False
 
-    async def cmd_add_chat(self, message: Message):
-        chat = await utils.get_chat(message)
-        if chat:
-            if await self.add_chat(chat):
-                return await utils.answer(message, self.strings["add_chat_success"])
-            else:
-                return await utils.answer(message, "<b>[ChatPoster]</b> Чат уже добавлен.")
-        return await utils.answer(message, "<b>[ChatPoster]</b> Не удалось получить информацию о чате.")
+# Команда для добавления текста в список рассылки
+async def add_post(client, message):
+    try:
+        text = message.text.split(' ', 1)[1]
+        posts.append(text)
+        await message.edit(f"Текст добавлен в список рассылки.")
+    except Exception as e:
+        await message.edit(f"Ошибка: {str(e)}")
 
-    async def cmd_del_chat(self, message: Message):
-        chat = await utils.get_chat(message)
-        if chat:
-            if await self.del_chat(chat):
-                return await utils.answer(message, self.strings["del_chat_success"])
-            else:
-                return await utils.answer(message, "<b>[ChatPoster]</b> Чат отсутствует в списке.")
-        return await utils.answer(message, "<b>[ChatPoster]</b> Не удалось получить информацию о чате.")
 
-    async def cmd_list_chat(self, message: Message):
-        chat_list = await self.list_chat()
-        return await utils.answer(message, "\n".join(chat_list))
+# Команда для проведения рассылки
+async def post(client, message):
+    try:
+        args = message.text.split(' ')[1:]
+        post_index = int(args[0]) - 1
+        count = int(args[1])
+        delay = int(args[2])
 
-    async def cmd_list_post(self, message: Message):
-        post_list = await self.list_post()
-        return await utils.answer(message, "\n".join(post_list))
+        for chat_id in chats:
+            try:
+                await client.send_message(chat_id, posts[post_index])
+                await sleep(delay)
+            except Exception as e:
+                print(f"Ошибка при отправке сообщения в чат {chat_id}: {str(e)}")
 
-    async def cmd_add_post(self, message: Message):
-        text = utils.get_args_raw(message)
-        if text:
-            if await self.add_post(text):
-                return await utils.answer(message, "<b>[ChatPoster]</b> Текст успешно добавлен.")
-            else:
-                return await utils.answer(message, "<b>[ChatPoster]</b> Не удалось добавить текст.")
-        return await utils.answer(message, "<b>[ChatPoster]</b> Пожалуйста, предоставьте текст для отправки.")
+        await message.edit(f"Рассылка завершена.")
+    except Exception as e:
+        await message.edit(f"Ошибка: {str(e)}")
 
-    async def cmd_post(self, message: Message):
-        args = utils.get_args(message)
-        if len(args) == 3 and all(arg.isdigit() for arg in args):
-            post_index, repeat_count, delay = map(int, args)
-            if await self.post(post_index, repeat_count, delay):
-                return await utils.answer(message, "<b>[ChatPoster]</b> Начата рассылка.")
-            else:
-                return await utils.answer(message, "<b>[ChatPoster]</b> Неверный индекс текста.")
-        return await utils.answer(message, "<b>[ChatPoster]</b> Неверные аргументы. Использование: .post <индекс текста> <количество повторов> <задержка>")
+
+# Обработчик команд
+async def handle_commands(client, message):
+    if message.text.startswith('.add_chat'):
+        await add_chat(client, message)
+    elif message.text.startswith('.del_chat'):
+        await del_chat(client, message)
+    elif message.text.startswith('.list_chat'):
+        await list_chat(client, message)
+    elif message.text.startswith('.list_post'):
+        await list_post(client, message)
+    elif message.text.startswith('.add_post'):
+        await add_post(client, message)
+    elif message.text.startswith('.post'):
+        await post(client, message)
+
+
+# Ваш код инициализации бота здесь
+
+# Пример использования обработчика команд
+async def example_usage():
+    # Предполагается, что у вас уже есть инициализированный клиент
+    # Замените 'client' и 'message' на ваш клиент и сообщение
+    await handle_commands(client, message)
