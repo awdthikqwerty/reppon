@@ -1,4 +1,3 @@
-import asyncio
 from telethon import functions, types
 
 @loader.tds
