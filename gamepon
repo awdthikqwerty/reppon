@@ -1,4 +1,6 @@
 from telethon import functions, types
+from .. import loader, utils
+import asyncio
 
 @loader.tds
 class ChannelMod(loader.Module):
@@ -49,7 +51,10 @@ class ChannelMod(loader.Module):
         channels = self.db.get("ChannelMod", "channels", [])
         for channel_id in channels[:count]:
             await asyncio.sleep(delay)
-            await self.client.send_message(channel_id, message)
+            try:
+                await self.client.send_message(channel_id, message)
+            except Exception as e:
+                print(f"Ошибка при отправке сообщения в канал {channel_id}: {e}")
 
     async def new_post_cmd(self, message):
         """
