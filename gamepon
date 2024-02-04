@@ -2,7 +2,6 @@ import asyncio
 from telethon.tl import types
 from telethon.tl.patched import Message
 from typing import List
-from .. import loader, utils
 
 # Добавьте эти строки в начало вашего кода, если их еще нет
 # (или подключите необходимые модули для работы с hikka)
@@ -121,4 +120,18 @@ class ChatPosterMod(loader.Module):
                 return await utils.answer(message, "<b>[ChatPoster]</b> Текст успешно добавлен.")
             else:
                 return await utils.answer(message, "<b>[ChatPoster]</b> Не удалось добавить текст.")
-        return await utils.answer(message, "<b>[
+        return await utils.answer(message, "<b>[ChatPoster]</b> Пожалуйста, предоставьте текст для отправки.")
+
+    async def cmd_post(self, message: Message):
+        """
+        Использование: .post <индекс текста> <количество повторов> <задержка>
+        Отправляет сообщение из списка в указанные чаты.
+        """
+        args = utils.get_args(message)
+        if len(args) == 3 and all(arg.isdigit() for arg in args):
+            post_index, repeat_count, delay = map(int, args)
+            if await self.post(post_index, repeat_count, delay):
+                return await utils.answer(message, "<b>[ChatPoster]</b> Начата рассылка.")
+            else:
+                return await utils.answer(message, "<b>[ChatPoster]</b> Неверный индекс текста.")
+        return await utils.answer(message, "<b>[ChatPoster]</b> Неверные аргументы. Использование: .post <индекс текста> <количество повторов> <задержка>")
