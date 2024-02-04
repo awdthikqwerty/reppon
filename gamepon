@@ -1,101 +1,124 @@
-from telethon import functions, types, utils
 import asyncio
-from telethon.tl.types import ChatBannedRights, ChatAdminRights, ChatPhoto
-from datetime import datetime
+from telethon.tl import types
+from telethon.tl.patched import Message
+from typing import List
+from .. import loader, utils
 
+# Добавьте эти строки в начало вашего кода, если их еще нет
+# (или подключите необходимые модули для работы с hikka)
+# import hikka
+# from hikka import loader, utils
+
+# ...
+
+# Команда для добавления чата для рассылки
 @loader.tds
-class ChannelMod(loader.Module):
+class ChatPosterMod(loader.Module):
     """
-    Управление чатами и рассылка сообщений.
+    Модуль для отправки сообщений в несколько чатов
     """
 
-    async def add_channel(self, chat_link):
-        try:
-            chat = await self.client.get_entity(chat_link)
-            if isinstance(chat, types.Channel):
-                channels = self.db.get("ChannelMod", "channels", [])
-                if chat.id not in channels:
-                    channels.append(chat.id)
-                    self.db.set("ChannelMod", "channels", channels)
-                    return True, f"Канал {chat.title} успешно добавлен."
-                else:
-                    return False, f"Канал {chat.title} уже есть в списке."
+    strings = {
+        "add_chat_success": "<b>[ChatPoster]</b> Чат успешно добавлен.",
+        "del_chat_success": "<b>[ChatPoster]</b> Чат успешно удален.",
+        "list_chat_header": "<b>[ChatPoster]</b> Список чатов для рассылки:",
+        "list_chat_item": "Чат {index}: {title} ({chat_id})",
+        "list_post_header": "<b>[ChatPoster]</b> Список текстов для отправки:",
+        "list_post_item": "Текст {index}: {text}",
+    }
+
+    def __init__(self):
+        self.chats = []
+        self.posts = []
+
+    async def add_chat(self, chat: types.Chat):
+        if chat not in self.chats:
+            self.chats.append(chat)
+            return True
+        return False
+
+    async def del_chat(self, chat: types.Chat):
+        if chat in self.chats:
+            self.chats.remove(chat)
+            return True
+        return False
+
+    async def list_chat(self):
+        result = [self.strings["list_chat_header"]]
+        for index, chat in enumerate(self.chats, start=1):
+            result.append(self.strings["list_chat_item"].format(index=index, title=chat.title, chat_id=chat.id))
+        return result
+
+    async def list_post(self):
+        result = [self.strings["list_post_header"]]
+        for index, post in enumerate(self.posts, start=1):
+            result.append(self.strings["list_post_item"].format(index=index, text=post))
+        return result
+
+    async def add_post(self, text: str):
+        self.posts.append(text)
+        return True
+
+    async def post(self, post_index: int, repeat_count: int, delay: int):
+        if 1 <= post_index <= len(self.posts):
+            for _ in range(repeat_count):
+                for chat in self.chats:
+                    await self.client.send_message(chat.id, self.posts[post_index - 1])
+                    await asyncio.sleep(delay)
+            return True
+        return False
+
+    async def cmd_add_chat(self, message: Message):
+        """
+        Использование: .add_chat <ссылка на чат>
+        Добавляет чат для отправки сообщений.
+        """
+        chat = await utils.get_chat(message)
+        if chat:
+            if await self.add_chat(chat):
+                return await utils.answer(message, self.strings["add_chat_success"])
             else:
-                return False, "Неверная ссылка на канал."
-        except Exception as e:
-            return False, str(e)
+                return await utils.answer(message, "<b>[ChatPoster]</b> Чат уже добавлен.")
+        return await utils.answer(message, "<b>[ChatPoster]</b> Не удалось получить информацию о чате.")
 
-    async def list_channels(self):
-        channels = self.db.get("ChannelMod", "channels", [])
-        if channels:
-            return "\n".join([f"- {channel} ({await self.get_chat_link(channel)})" for channel in channels])
-        else:
-            return "Пока что не добавлено ни одного канала."
-
-    async def get_chat_link(self, channel_id):
-        try:
-            entity = await self.client.get_entity(channel_id)
-            return f"[{channel_id}](https://t.me/{entity.username})"
-        except Exception:
-            return f"{channel_id}"
-
-    async def remove_channel(self, chat_link):
-        try:
-            chat = await self.client.get_entity(chat_link)
-            if isinstance(chat, types.Channel):
-                channels = self.db.get("ChannelMod", "channels", [])
-                if chat.id in channels:
-                    channels.remove(chat.id)
-                    self.db.set("ChannelMod", "channels", channels)
-                    return True, f"Канал {chat.title} успешно удален."
-                else:
-                    return False, f"Канал {chat.title} не найден в списке."
+    async def cmd_del_chat(self, message: Message):
+        """
+        Использование: .del_chat <ссылка на чат>
+        Удаляет чат из списка для отправки сообщений.
+        """
+        chat = await utils.get_chat(message)
+        if chat:
+            if await self.del_chat(chat):
+                return await utils.answer(message, self.strings["del_chat_success"])
             else:
-                return False, "Неверная ссылка на канал."
-        except Exception as e:
-            return False, str(e)
+                return await utils.answer(message, "<b>[ChatPoster]</b> Чат отсутствует в списке.")
+        return await utils.answer(message, "<b>[ChatPoster]</b> Не удалось получить информацию о чате.")
 
-    async def broadcast_message(self, message, count, delay):
-        channels = self.db.get("ChannelMod", "channels", [])
-        for channel_id in channels[:count]:
-            await asyncio.sleep(delay)
-            await self.client.send_message(channel_id, message)
+    async def cmd_list_chat(self, message: Message):
+        """
+        Использование: .list_chat
+        Показывает список чатов для отправки сообщений.
+        """
+        chat_list = await self.list_chat()
+        return await utils.answer(message, "\n".join(chat_list))
 
-    async def new_post_cmd(self, message):
+    async def cmd_list_post(self, message: Message):
         """
-        Использование: .newpost <количество> <текст> <задержка>
-        Отправляет новое сообщение в добавленные каналы.
+        Использование: .list_post
+        Показывает список текстов для отправки.
         """
-        args = utils.get_args(message)
-        if len(args) != 3:
-            return await utils.answer(message, "Неверное количество аргументов.")
+        post_list = await self.list_post()
+        return await utils.answer(message, "\n".join(post_list))
 
-        count, text, delay = map(int, args)
-        await self.broadcast_message(text, count, delay)
-        return await utils.answer(message, "Рассылка завершена.")
-
-    async def channel_cmd(self, message):
+    async def cmd_add_post(self, message: Message):
         """
-        Использование: .channel <ссылка на чат>
-        Добавляет новый канал в список.
+        Использование: .add_post <текст>
+        Добавляет текст для отправки.
         """
-        chat_link = utils.get_args_raw(message)
-        success, result = await self.add_channel(chat_link)
-        return await utils.answer(message, result) if success else await utils.answer(message, f"Ошибка: {result}")
-
-    async def listchannel_cmd(self, message):
-        """
-        Использование: .listchannel
-        Показывает список всех добавленных каналов.
-        """
-        channels_list = await self.list_channels()
-        return await utils.answer(message, channels_list)
-
-    async def removechannel_cmd(self, message):
-        """
-        Использование: .removechannel <ссылка на чат>
-        Удаляет канал из списка.
-        """
-        chat_link = utils.get_args_raw(message)
-        success, result = await self.remove_channel(chat_link)
-        return await utils.answer(message, result) if success else await utils.answer(message, f"Ошибка: {result}")
+        text = utils.get_args_raw(message)
+        if text:
+            if await self.add_post(text):
+                return await utils.answer(message, "<b>[ChatPoster]</b> Текст успешно добавлен.")
+            else:
+                return await utils.answer(message, "<b>[ChatPoster]</b> Не удалось добавить текст.")
+        return await utils.answer(message, "<b>[
