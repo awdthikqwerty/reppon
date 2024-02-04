@@ -10,7 +10,6 @@ from typing import List
 
 # ...
 
-# Команда для добавления чата для рассылки
 @loader.tds
 class ChatPosterMod(loader.Module):
     """
@@ -68,10 +67,6 @@ class ChatPosterMod(loader.Module):
         return False
 
     async def cmd_add_chat(self, message: Message):
-        """
-        Использование: .add_chat <ссылка на чат>
-        Добавляет чат для отправки сообщений.
-        """
         chat = await utils.get_chat(message)
         if chat:
             if await self.add_chat(chat):
@@ -81,10 +76,6 @@ class ChatPosterMod(loader.Module):
         return await utils.answer(message, "<b>[ChatPoster]</b> Не удалось получить информацию о чате.")
 
     async def cmd_del_chat(self, message: Message):
-        """
-        Использование: .del_chat <ссылка на чат>
-        Удаляет чат из списка для отправки сообщений.
-        """
         chat = await utils.get_chat(message)
         if chat:
             if await self.del_chat(chat):
@@ -94,26 +85,14 @@ class ChatPosterMod(loader.Module):
         return await utils.answer(message, "<b>[ChatPoster]</b> Не удалось получить информацию о чате.")
 
     async def cmd_list_chat(self, message: Message):
-        """
-        Использование: .list_chat
-        Показывает список чатов для отправки сообщений.
-        """
         chat_list = await self.list_chat()
         return await utils.answer(message, "\n".join(chat_list))
 
     async def cmd_list_post(self, message: Message):
-        """
-        Использование: .list_post
-        Показывает список текстов для отправки.
-        """
         post_list = await self.list_post()
         return await utils.answer(message, "\n".join(post_list))
 
     async def cmd_add_post(self, message: Message):
-        """
-        Использование: .add_post <текст>
-        Добавляет текст для отправки.
-        """
         text = utils.get_args_raw(message)
         if text:
             if await self.add_post(text):
@@ -123,10 +102,6 @@ class ChatPosterMod(loader.Module):
         return await utils.answer(message, "<b>[ChatPoster]</b> Пожалуйста, предоставьте текст для отправки.")
 
     async def cmd_post(self, message: Message):
-        """
-        Использование: .post <индекс текста> <количество повторов> <задержка>
-        Отправляет сообщение из списка в указанные чаты.
-        """
         args = utils.get_args(message)
         if len(args) == 3 and all(arg.isdigit() for arg in args):
             post_index, repeat_count, delay = map(int, args)
